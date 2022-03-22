@@ -1,0 +1,80 @@
+#! /bin/bash
+# rhls-lab
+# rhls connect to lab
+
+# global vars
+COMMAND_NAME=rhls-lab
+RHLS_LAB_CONFIG_FILENAME=rhls-lab.config
+CONFIG_DIRECTORY=~/.config
+PATH_TO_RHLS_LAB_CONFIG_FILE="${CONFIG_DIRECTORY}/${RHLS_LAB_CONFIG_FILENAME}"
+
+display_help() {
+ echo "Usage: $COMMAND_NAME {init|connect}" >&2
+ exit 1
+}
+
+connect() {
+ echo "Reading config from file"
+ if [ ! -f $PATH_TO_RHLS_LAB_CONFIG_FILE ]; then
+  echo "No config detected. Initialise config file by running: $COMMAND_NAME init"
+  exit 1
+ fi
+ . $PATH_TO_RHLS_LAB_CONFIG_FILE
+
+ echo "Connecting to RHLS Lab Environment"
+
+ if [ -z "$1" ]
+ then
+   read -p "Enter Public IP address [RHLS_PUBLIC_IP]: " public_ip_input
+   connect_to_lab_ip=${public_ip_input:-$RHLS_PUBLIC_IP}
+ else
+   connect_to_lab_ip=$1
+ fi
+
+ if [ -z "$connect_to_lab_ip" ]
+ then
+   echo "Failed to detect lab IP"
+   exit 1
+ fi
+
+ ssh-add ~/.ssh/rht_classroom.rsa
+ ssh -i ~/.ssh/rht_classroom.rsa -J cloud-user@$connect_to_lab_ip:$RHLS_PUBLIC_PORT $RHLS_USERNAME@$RHLS_LOCAL_IP -p $RHLS_LOCAL_PORT
+}
+
+init() {
+ echo "Initialising RHLS Lab Environment configuration"
+
+ read -p "Enter Public IP address: " public_ip_input
+
+ read -p "Enter Public Port [22022]: " public_port_input_raw
+ public_port_input=${public_port_input_raw:-22022}
+
+ read -p "Enter Username [student]: " username_input_raw
+ username_input=${username_input_raw:-"student"}
+ 
+ read -p "Enter Local IP address [172.25.252.1]: " local_ip_input_raw
+ local_ip_input=${local_ip_input_raw:-"172.25.252.1"}
+ 
+ read -p "Enter Local Port [53009]: " local_port_input_raw
+ local_port_input=${local_port_input_raw:-53009}
+
+ echo "Saving configuration to $PATH_TO_RHLS_LAB_CONFIG_FILE"
+ mkdir -p $CONFIG_DIRECTORY
+ echo -e "RHLS_PUBLIC_IP=$public_ip_input\nRHLS_PUBLIC_PORT=$public_port_input\nRHLS_USERNAME=$username_input\nRHLS_LOCAL_IP=$local_ip_input\nRHLS_LOCAL_PORT=$local_port_input" > $PATH_TO_RHLS_LAB_CONFIG_FILE
+
+ echo "Initialisation complete"
+}
+
+case "$1" in
+ init)
+  init
+  ;;
+ connect)
+  connect
+  ;;
+ *)
+  display_help
+  ;;
+esac
+
+exit 0
