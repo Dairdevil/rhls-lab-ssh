@@ -7,7 +7,8 @@ Util script for configuring and connecting to an RHLS lab via SSH
 ```sh
 rhls-lab init
 ```
-This starts a wizard that prompts for each required value. See configuration values table below.
+This starts a wizard that prompts for each required value. See configuration values table below. If there is no profile
+currently set to default then the newly created profile is automatically set to default.
 
 ### Connecting to a lab environment
 
@@ -16,9 +17,15 @@ The SSH key provided in the lab interface must be available at `~/.ssh/rht_class
 
 #### Connecting
 ```sh
-rhls-lab connect
+rhls-lab connect [-p <profile_name>]
 ```
-This connects to the lab environment as configured.
+This connects to the lab environment as configured. If no profile is specified the default profile is used.
+
+### Changing default profile
+```sh
+rhls-lab profile <profile_name>
+```
+The default profile is changed to the named profile.
 
 ## Configuration
 
