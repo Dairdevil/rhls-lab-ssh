@@ -8,7 +8,8 @@ CONFIG_DIRECTORY=~/.config
 DEFAULT_PROFILE_NAME=default
 RHLS_LAB_CONFIG_DIRECTORY="${CONFIG_DIRECTORY}/rhls-lab"
 RHLS_LAB_CONFIG_FILE_EXTENSION=.config
-PATH_TO_DEFAULT_CONFIG="${RHLS_LAB_CONFIG_DIRECTORY}/${DEFAULT_PROFILE_NAME}${RHLS_LAB_CONFIG_FILE_EXTENSION}"
+RHLS_LAB_CONFIG_FILENAME=config
+PATH_TO_DEFAULT_CONFIG="${RHLS_LAB_CONFIG_DIRECTORY}/${DEFAULT_PROFILE_NAME}"
 
 display_help() {
   echo "Usage: $COMMAND_NAME {init|connect|profile}" >&2
@@ -32,7 +33,7 @@ connect() {
 
   echo "Connecting to lab for profile '${profile}'"
 
-  path_to_config="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}${RHLS_LAB_CONFIG_FILE_EXTENSION}"
+  path_to_config="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}/${RHLS_LAB_CONFIG_FILENAME}"
 
   if [ ! -f "$path_to_config" ]; then
    echo "No config detected for profile '${profile}'. Initialise config file by running: $COMMAND_NAME init"
@@ -82,10 +83,10 @@ init() {
   read -p "Enter Local Port [53009]: " local_port_input_raw
   local_port_input=${local_port_input_raw:-53009}
 
-  echo "Saving configuration to $RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input$RHLS_LAB_CONFIG_FILE_EXTENSION"
-  mkdir -p "$RHLS_LAB_CONFIG_DIRECTORY"
+  echo "Saving configuration to $RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input/$RHLS_LAB_CONFIG_FILENAME"
+  mkdir -p "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input"
   echo -e "#$profile_name_input\nRHLS_PUBLIC_IP=$public_ip_input\nRHLS_PUBLIC_PORT=$public_port_input\nRHLS_USERNAME=$username_input\nRHLS_LOCAL_IP=$local_ip_input\nRHLS_LOCAL_PORT=$local_port_input" \
-  > "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input$RHLS_LAB_CONFIG_FILE_EXTENSION"
+  > "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input/$RHLS_LAB_CONFIG_FILENAME"
 
   if [ -e "$PATH_TO_DEFAULT_CONFIG" ]; then
     read -p "Make this your default profile? (y/n) [y] " make_default
@@ -101,9 +102,9 @@ init() {
 make_profile_default() {
 
   profile="$1"
-  path_to_profile_config="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}${RHLS_LAB_CONFIG_FILE_EXTENSION}"
+  path_to_profile_config="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}"
 
-  if [ ! -f "$path_to_profile_config" ]; then
+  if [ ! -e "$path_to_profile_config" ]; then
     echo "Profile '${profile}' not found"
     exit 1
   fi
