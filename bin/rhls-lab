@@ -11,9 +11,26 @@ PATH_TO_DEFAULT_CONFIG="${RHLS_LAB_CONFIG_DIRECTORY}/${DEFAULT_PROFILE_NAME}"
 RHLS_LAB_CONFIG_FILENAME=config
 RHLS_LAB_SSH_KEY_FILENAME=id.rsa
 
+## Default Config Values
+RHLS_LAB_DEFAULT_PUBLIC_PORT=22022
+RHLS_LAB_DEFAULT_PUBLIC_USERNAME=cloud-user
+RHLS_LAB_DEFAULT_LOCAL_IP=172.25.252.1
+RHLS_LAB_DEFAULT_LOCAL_PORT=53009
+RHLS_LAB_DEFAULT_LOCAL_USERNAME=student
+
 display_help() {
   echo "Usage: $COMMAND_NAME {init|connect|profile|add-key}" >&2
   exit 1
+}
+
+connect_usage() {
+  cat <<EOF
+Usage:
+  ${COMMAND_NAME} connect [OPTIONS]
+
+Options:
+  -p <profile_name>: The profile name to save the configuration under
+EOF
 }
 
 connect() {
@@ -25,6 +42,7 @@ connect() {
     p)  profile=$(echo -n "$OPTARG" | xargs)
         ;;
     \?) printf "Unrecognised option: -%s\n" "$OPTARG" >&2
+        connect_usage
         exit 1
         ;;
     esac
@@ -44,10 +62,85 @@ connect() {
   . $path_to_config
 
   ssh-add "$path_to_key"
-  ssh -i "$path_to_key" -J cloud-user@$RHLS_PUBLIC_IP:$RHLS_PUBLIC_PORT $RHLS_USERNAME@$RHLS_LOCAL_IP -p $RHLS_LOCAL_PORT
+  ssh -i "$path_to_key" -J "$RHLS_PUBLIC_USERNAME"@"$RHLS_PUBLIC_IP":"$RHLS_PUBLIC_PORT" "$RHLS_LOCAL_USERNAME"@"$RHLS_LOCAL_IP" -p "$RHLS_LOCAL_PORT"
+
+  echo "RHLS Lab exited"
+}
+
+init_usage() {
+  cat <<EOF
+Usage:
+  ${COMMAND_NAME} init [OPTIONS]
+
+Options:
+  -p <profile_name>: The profile name to save the configuration under
+  -i <public_ip_address>: The public IP address of the lab environment
+  -k <path_to_ssh_key>: Path to the SSH key obtained through the lab environment controls
+  -d: Include flag to make this the default profile
+EOF
 }
 
 init() {
+
+  if [ "$#" -ne 0 ]
+  then
+    quick_init "${@}"
+  else
+    standard_init
+  fi
+
+}
+
+quick_init() {
+
+  local OPTIND profile_name_input public_ip_input path_to_key_input
+  make_default=false
+
+  while getopts ":p:i:k:d:" option; do
+    case "$option" in
+    p)  profile_name_input=$(echo -n "$OPTARG" | xargs)
+        ;;
+    i)  public_ip_input=$(echo -n "$OPTARG" | xargs)
+        ;;
+    k)  path_to_key_input=$(echo -n "$OPTARG" | xargs)
+        ;;
+    d)  make_default=true
+        ;;
+    \?) printf "Unrecognised option: -%s\n" "$OPTARG" >&2
+        init_usage
+        exit 1
+        ;;
+    esac
+  done
+  shift $((OPTIND - 1))
+
+  if [ -z "$profile_name_input" ] || [ -z "$public_ip_input" ] || [ -z "$path_to_key_input" ]
+  then
+    echo "Invalid arguments passed"
+    init_usage
+    exit 1
+  fi
+
+  if [ "$profile_name_input" = "$DEFAULT_PROFILE_NAME" ]
+  then
+    echo "Profile Name must not collide with reserved name '${DEFAULT_PROFILE_NAME}'"
+    init_usage
+    exit 1
+  fi
+
+  save_config "$profile_name_input" \
+  "$public_ip_input" $RHLS_LAB_DEFAULT_PUBLIC_PORT $RHLS_LAB_DEFAULT_PUBLIC_USERNAME \
+  $RHLS_LAB_DEFAULT_LOCAL_IP $RHLS_LAB_DEFAULT_LOCAL_PORT $RHLS_LAB_DEFAULT_LOCAL_USERNAME
+
+  configure_ssh_key -p "$profile_name_input" -k "$path_to_key_input"
+
+  if [ ! -e "$PATH_TO_DEFAULT_CONFIG" ] || [ "$make_default" = "true" ]; then
+    make_profile_default "$profile_name_input"
+  fi
+}
+
+standard_init() {
+
   echo "Initialising RHLS Lab Environment configuration"
 
   read -p "Enter Profile Name: " profile_name_input_raw
@@ -56,10 +149,12 @@ init() {
   if [ -z "$profile_name_input" ]
   then
     echo "Profile Name is required and must not collide with reserved name '${DEFAULT_PROFILE_NAME}'"
+    init_usage
     exit 1
   elif [ "$profile_name_input" = "$DEFAULT_PROFILE_NAME" ]
   then
     echo "Profile Name must not collide with reserved name '${DEFAULT_PROFILE_NAME}'"
+    init_usage
     exit 1
   fi
 
@@ -69,28 +164,32 @@ init() {
   if [ -z "$public_ip_input" ]
   then
     echo "Public IP Address must be provided"
+    init_usage
     exit 1
   fi
 
-  read -p "Enter Public Port [22022]: " public_port_input_raw
-  public_port_input=${public_port_input_raw:-22022}
+  read -p "Enter Public Port [${RHLS_LAB_DEFAULT_PUBLIC_PORT}]: " public_port_input_raw
+  public_port_input=${public_port_input_raw:-$RHLS_LAB_DEFAULT_PUBLIC_PORT}
 
-  read -p "Enter Username [student]: " username_input_raw
-  username_input=${username_input_raw:-"student"}
+  read -p "Enter Public Username [${RHLS_LAB_DEFAULT_PUBLIC_USERNAME}]: " public_username_input_raw
+  public_username_input=${public_username_input_raw:-$RHLS_LAB_DEFAULT_PUBLIC_USERNAME}
 
-  read -p "Enter Local IP address [172.25.252.1]: " local_ip_input_raw
-  local_ip_input=${local_ip_input_raw:-"172.25.252.1"}
+  read -p "Enter Local IP address [${RHLS_LAB_DEFAULT_LOCAL_IP}]: " local_ip_input_raw
+  local_ip_input=${local_ip_input_raw:-$RHLS_LAB_DEFAULT_LOCAL_IP}
 
-  read -p "Enter Local Port [53009]: " local_port_input_raw
-  local_port_input=${local_port_input_raw:-53009}
+  read -p "Enter Local Port [${RHLS_LAB_DEFAULT_LOCAL_PORT}]: " local_port_input_raw
+  local_port_input=${local_port_input_raw:-$RHLS_LAB_DEFAULT_LOCAL_PORT}
+
+  read -p "Enter Local Username [${RHLS_LAB_DEFAULT_LOCAL_USERNAME}]: " local_username_input_raw
+  local_username_input=${local_username_input_raw:-$RHLS_LAB_DEFAULT_LOCAL_USERNAME}
 
   read -p "Enter path to SSH Key: [~/Downloads/rht_classroom.rsa]" path_to_key_input_raw
   path_to_key_input=${path_to_key_input_raw:"~/Downloads/rht_classroom.rsa"}
 
-  echo "Saving configuration to $RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input/$RHLS_LAB_CONFIG_FILENAME"
-  mkdir -p "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input"
-  echo -e "#$profile_name_input\nRHLS_PUBLIC_IP=$public_ip_input\nRHLS_PUBLIC_PORT=$public_port_input\nRHLS_USERNAME=$username_input\nRHLS_LOCAL_IP=$local_ip_input\nRHLS_LOCAL_PORT=$local_port_input" \
-  > "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name_input/$RHLS_LAB_CONFIG_FILENAME"
+  echo "Saving configuration to $RHLS_LAB_CONFIG_DIRECTORY/$profile_name/$RHLS_LAB_CONFIG_FILENAME"
+  save_config "$profile_name_input" \
+  "$public_ip_input" "$public_port_input" "$public_username_input" \
+  "$local_ip_input" "$local_port_input" "$local_username_input"
 
   configure_ssh_key -p "$profile_name_input" -k "$path_to_key_input"
 
@@ -105,6 +204,35 @@ init() {
   echo "Initialisation complete"
 }
 
+save_config() {
+  
+  profile_name="$1"
+  public_ip="$2"
+  public_port="$3"
+  public_username="$4"
+  local_ip="$5"
+  local_port="$6"
+  local_username="$7"
+
+  mkdir -p "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name"
+  echo -e "#$profile_name\nRHLS_PUBLIC_IP=$public_ip\nRHLS_PUBLIC_PORT=$public_port\nRHLS_PUBLIC_USERNAME=$public_username\nRHLS_LOCAL_IP=$local_ip\nRHLS_LOCAL_PORT=$local_port\nRHLS_LOCAL_USERNAME=$local_username" \
+  > "$RHLS_LAB_CONFIG_DIRECTORY/$profile_name/$RHLS_LAB_CONFIG_FILENAME"
+
+}
+
+configure_ssh_key_usage() {
+  cat <<EOF
+Usage:
+  ${COMMAND_NAME} add-key -k <path_to_ssh_key> [OPTIONS]
+
+Required:
+  -k <path_to_ssh_key>: Path to the SSH key obtained through the lab environment controls
+
+Options:
+  -p <profile_name>: The profile name to save the configuration under
+EOF
+}
+
 configure_ssh_key() {
 
   local OPTIND profile path_to_key
@@ -117,6 +245,7 @@ configure_ssh_key() {
     k)  path_to_key=$(echo -n "$OPTARG" | xargs)
         ;;
     \?) printf "Unrecognised option: -%s\n" "$OPTARG" >&2
+        configure_ssh_key_usage
         exit 1
         ;;
     esac
@@ -125,10 +254,15 @@ configure_ssh_key() {
 
   if [ -z "$path_to_key" ]; then
     echo "Must provide path to SSH key"
+    configure_ssh_key_usage
     exit 1
   elif [ ! -f "$path_to_key" ]; then
     echo "File not found at path '${path_to_key}'"
     exit 1
+  fi
+
+  if [ -f "$path_to_profile_config/$RHLS_LAB_SSH_KEY_FILENAME" ]; then
+    rm "$path_to_profile_config/$RHLS_LAB_SSH_KEY_FILENAME"
   fi
 
   path_to_profile_config="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}"
@@ -138,6 +272,13 @@ configure_ssh_key() {
   chmod 0600 "$path_to_profile_config/$RHLS_LAB_SSH_KEY_FILENAME"
 }
 
+make_profile_default_usage() {
+  cat <<EOF
+Usage:
+  ${COMMAND_NAME} profile <profile_name>
+EOF
+}
+
 make_profile_default() {
 
   profile="$1"
@@ -145,6 +286,7 @@ make_profile_default() {
 
   if [ ! -e "$path_to_profile_config" ]; then
     echo "Profile '${profile}' not found"
+    make_profile_default_usage
     exit 1
   fi
 
@@ -160,7 +302,7 @@ make_profile_default() {
 # Main
 case "$1" in
   init)
-    init
+    init "${@:2}"
     ;;
   connect)
     connect "${@:2}"
