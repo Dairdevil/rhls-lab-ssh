@@ -2,6 +2,16 @@
 
 Util script for configuring and connecting to an RHLS lab via SSH
 
+## Installation
+
+### MacOS
+
+```sh
+brew tap dairdevil/rhls-utils
+
+brew install rhls-lab-ssh
+```
+
 ## Usage
 
 ### Initialising a connection
