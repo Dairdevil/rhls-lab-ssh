@@ -62,8 +62,14 @@ connect() {
   . $path_to_config
 
   ssh-add "$path_to_key"
-  ssh -o UserKnownHostsFile="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}/known_hosts" -i "$path_to_key" -J "$RHLS_PUBLIC_USERNAME"@"$RHLS_PUBLIC_IP":"$RHLS_PUBLIC_PORT" "$RHLS_LOCAL_USERNAME"@"$RHLS_LOCAL_IP" -p "$RHLS_LOCAL_PORT"
 
+  ssh -i "$path_to_key" \
+  -o UserKnownHostsFile="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}/known_hosts" \
+  -J "$RHLS_PUBLIC_USERNAME"@"$RHLS_PUBLIC_IP":"$RHLS_PUBLIC_PORT" "$RHLS_LOCAL_USERNAME"@"$RHLS_LOCAL_IP" \
+  -p "$RHLS_LOCAL_PORT"
+
+  ssh-add -d
+  
   echo "RHLS Lab exited"
 }
 
