@@ -18,11 +18,6 @@ RHLS_LAB_DEFAULT_LOCAL_IP=172.25.252.1
 RHLS_LAB_DEFAULT_LOCAL_PORT=53009
 RHLS_LAB_DEFAULT_LOCAL_USERNAME=student
 
-display_help() {
-  echo "Usage: $COMMAND_NAME {init|connect|profile|add-key}" >&2
-  exit 1
-}
-
 connect_usage() {
   cat <<EOF
 Usage:
@@ -63,13 +58,15 @@ connect() {
 
   ssh-add "$path_to_key"
 
+  rm ${RHLS_LAB_CONFIG_DIRECTORY}/${profile}/known_hosts
+
   ssh -i "$path_to_key" \
   -o UserKnownHostsFile="${RHLS_LAB_CONFIG_DIRECTORY}/${profile}/known_hosts" \
   -J "$RHLS_PUBLIC_USERNAME"@"$RHLS_PUBLIC_IP":"$RHLS_PUBLIC_PORT" "$RHLS_LOCAL_USERNAME"@"$RHLS_LOCAL_IP" \
   -p "$RHLS_LOCAL_PORT"
 
   ssh-add -d
-  
+
   echo "RHLS Lab exited"
 }
 
@@ -174,23 +171,23 @@ standard_init() {
     exit 1
   fi
 
-  read -p "Enter Public Port [${RHLS_LAB_DEFAULT_PUBLIC_PORT}]: " public_port_input_raw
+  read -p "Public Port [${RHLS_LAB_DEFAULT_PUBLIC_PORT}]: " public_port_input_raw
   public_port_input=${public_port_input_raw:-$RHLS_LAB_DEFAULT_PUBLIC_PORT}
 
-  read -p "Enter Public Username [${RHLS_LAB_DEFAULT_PUBLIC_USERNAME}]: " public_username_input_raw
+  read -p "Public Username [${RHLS_LAB_DEFAULT_PUBLIC_USERNAME}]: " public_username_input_raw
   public_username_input=${public_username_input_raw:-$RHLS_LAB_DEFAULT_PUBLIC_USERNAME}
 
-  read -p "Enter Local IP address [${RHLS_LAB_DEFAULT_LOCAL_IP}]: " local_ip_input_raw
+  read -p "Local IP address [${RHLS_LAB_DEFAULT_LOCAL_IP}]: " local_ip_input_raw
   local_ip_input=${local_ip_input_raw:-$RHLS_LAB_DEFAULT_LOCAL_IP}
 
-  read -p "Enter Local Port [${RHLS_LAB_DEFAULT_LOCAL_PORT}]: " local_port_input_raw
+  read -p "Local Port [${RHLS_LAB_DEFAULT_LOCAL_PORT}]: " local_port_input_raw
   local_port_input=${local_port_input_raw:-$RHLS_LAB_DEFAULT_LOCAL_PORT}
 
-  read -p "Enter Local Username [${RHLS_LAB_DEFAULT_LOCAL_USERNAME}]: " local_username_input_raw
+  read -p "Local Username [${RHLS_LAB_DEFAULT_LOCAL_USERNAME}]: " local_username_input_raw
   local_username_input=${local_username_input_raw:-$RHLS_LAB_DEFAULT_LOCAL_USERNAME}
 
-  read -p "Enter path to SSH Key: [~/Downloads/rht_classroom.rsa]" path_to_key_input_raw
-  path_to_key_input=${path_to_key_input_raw:"~/Downloads/rht_classroom.rsa"}
+  read -p "Path to SSH Key [~/Downloads/rht_classroom.rsa]: " path_to_key_input_raw
+  path_to_key_input=${path_to_key_input_raw:-"~/Downloads/rht_classroom.rsa"}
 
   echo "Saving configuration to $RHLS_LAB_CONFIG_DIRECTORY/$profile_name/$RHLS_LAB_CONFIG_FILENAME"
   save_config "$profile_name_input" \
@@ -278,11 +275,53 @@ configure_ssh_key() {
   chmod 0600 "$path_to_profile_config/$RHLS_LAB_SSH_KEY_FILENAME"
 }
 
-make_profile_default_usage() {
+manage_profiles_usage() {
   cat <<EOF
 Usage:
-  ${COMMAND_NAME} profile <profile_name>
+  ${COMMAND_NAME} profile [OPTIONS]
+
+Options:
+  -d <profile_name>: Make profile default
+  -r <profile_name>: Remove profile
 EOF
+}
+
+manage_profiles() {
+
+  local OPTIND default_profile delete_profile do_set_default_profile do_delete_profile
+
+  do_set_default_profile=false
+  do_delete_profile=false
+
+    while getopts ":r:l:d:" option; do
+      case "$option" in
+      d)  do_set_default_profile=true
+          default_profile=$(echo -n "$OPTARG" | xargs)
+          ;;
+      r)  do_delete_profile=true
+          delete_profile=$(echo -n "$OPTARG" | xargs)
+          ;;
+      \?) printf "Unrecognised option: -%s\n" "$OPTARG" >&2
+          manage_profiles_usage
+          exit 1
+          ;;
+      esac
+    done
+    shift $((OPTIND - 1))
+
+    if [ "$do_set_default_profile" == false ] && [ "$do_delete_profile" == false ]; then
+      list_profiles
+      exit 0
+    fi
+
+    if [ "$do_set_default_profile" == true ]; then
+      make_profile_default $default_profile
+    fi
+
+    if [ "$do_delete_profile" == true ]; then
+      rm -rf $RHLS_LAB_CONFIG_DIRECTORY/$delete_profile
+      echo "Profile '${delete_profile}' deleted"
+    fi
 }
 
 make_profile_default() {
@@ -292,7 +331,6 @@ make_profile_default() {
 
   if [ ! -e "$path_to_profile_config" ]; then
     echo "Profile '${profile}' not found"
-    make_profile_default_usage
     exit 1
   fi
 
@@ -305,6 +343,29 @@ make_profile_default() {
   echo "Default profile has been set to '${profile}'"
 }
 
+list_profiles() {
+
+  echo "Available profiles: "
+
+  profiles=$(ls $RHLS_LAB_CONFIG_DIRECTORY)
+
+  default_profile=$(basename -- "$(readlink -f $PATH_TO_DEFAULT_CONFIG)")
+
+  for profile in $profiles
+  do
+    if [ "$profile" == "$default_profile" ]; then
+      echo "  ${profile} (default)"
+    elif [ "$profile" != "$DEFAULT_PROFILE_NAME" ]; then
+      echo "  ${profile}"
+    fi
+  done
+}
+
+display_help() {
+  echo "Usage: $COMMAND_NAME {init|connect|profile}" >&2
+  exit 1
+}
+
 # Main
 case "$1" in
   init)
@@ -314,10 +375,7 @@ case "$1" in
     connect "${@:2}"
     ;;
   profile)
-    make_profile_default "${2}"
-    ;;
-  add-key)
-    configure_ssh_key "${@:2}"
+    manage_profiles "${@:2}"
     ;;
   *)
     display_help
